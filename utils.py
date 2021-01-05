@@ -3,7 +3,7 @@ import os
 import shutil
 import random
 import numpy as np
-from PIL import Image
+import cv2
 
 #%% 
 def CalculateStats(data_root):
@@ -25,7 +25,7 @@ def CalculateStats(data_root):
             img_path = os.path.join(data_root,sub_folder,img)
             
             # read image
-            image = np.array(Image.open(img_path).convert("LA"))
+            image = np.array(cv2.imread(img_path,0))
             
             # calculate stats
             mean.append(np.mean(image))

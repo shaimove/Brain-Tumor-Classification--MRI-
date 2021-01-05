@@ -19,8 +19,17 @@ class MRIModel(nn.Module):
         # from (N*16*32*32) to (N*32*16*16)
         self.block4 = ConvBlock(conv_channels * 4, conv_channels * 8)
         
+        # from (N*32*16*16) to (N*64*8*8)
+        self.block5 = ConvBlock(conv_channels * 8, conv_channels * 16)
+        
+        # Linear to 64-output
+        self.linear1 = nn.Linear(64*8*8, 64)
+        
+        # TanH layer after first linear
+        self.tanh = nn.Tanh()
+        
         # Linear to 4-output
-        self.linear = nn.Linear(32*16*16, 4)
+        self.linear2 = nn.Linear(64, 4)
         
         # softmax layer
         self.softmax = nn.Softmax(dim=1)
@@ -46,15 +55,18 @@ class MRIModel(nn.Module):
         block_out = self.block2(block_out)
         block_out = self.block3(block_out)
         block_out = self.block4(block_out)
+        block_out = self.block5(block_out)
         
         # flatten to 1D vector
         conv_flat = block_out.view(block_out.size(0),-1,)
             
         # linear and softmax
-        linear_output = self.linear(conv_flat)
+        linear_output = self.linear1(conv_flat)
+        linear_output = self.tanh(linear_output)
+        linear_output = self.linear2(linear_output)
         output = self.softmax(linear_output)
         
-        return output
+        return linear_output,output
         
         
 
@@ -63,10 +75,10 @@ class ConvBlock(nn.Module):
         super().__init__()
         
         # two blocks of Cond2D->ReLU->BatchNorm2D ans than MaxPool2D
-        self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size=5, padding=2)
         self.relu1 = nn.ReLU(inplace=True)
         self.bn1 = nn.BatchNorm2d(conv_channels)
-        self.conv2 = nn.Conv2d(conv_channels, conv_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(conv_channels, conv_channels, kernel_size=5, padding=2)
         self.relu2 = nn.ReLU(inplace=True)
         self.bn2 = nn.BatchNorm2d(conv_channels)
         
