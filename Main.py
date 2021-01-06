@@ -37,11 +37,11 @@ mean = 44.17 ; std = 43.51;
 #%% Create dataset and data loader
 # Define transformation and data augmentation
 transform = transforms.Compose([transforms.ToTensor(),
-    transforms.Resize((256,256)),
+    transforms.Resize((512,512)),
     transforms.Normalize(mean=[mean],std=[std])])
 
 # define batch size
-batch_size_train = 256
+batch_size_train = 64
 batch_size_validation = 32
 
 # define dataset and dataloader for training
@@ -55,11 +55,11 @@ validation_loader = data.DataLoader(train_dataset,batch_size=batch_size_validati
 
 #%% Define parameters
 # number of epochs
-num_epochs = 10
+num_epochs = 20
 
 # load model
 model = model.MRIModel().to(device)
-print(utils.count_parameters(model))
+utils.count_parameters(model)
 
 # send parameters to optimizer
 learning_rate = 0.01
