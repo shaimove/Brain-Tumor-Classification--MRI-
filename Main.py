@@ -55,13 +55,14 @@ validation_loader = data.DataLoader(train_dataset,batch_size=batch_size_validati
 
 #%% Define parameters
 # number of epochs
-num_epochs = 100
+num_epochs = 10
 
 # load model
 model = model.MRIModel().to(device)
+print(utils.count_parameters(model))
 
 # send parameters to optimizer
-learning_rate = 0.001
+learning_rate = 0.01
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # define loss function 
@@ -159,12 +160,44 @@ validationLog.PlotConfusionMatrix(classes)
 
 
 
-#%% Testing
+#%% Testing Loop
 # define dataset and dataloader for testing
-batch_size_test = 32
-train_dataset = DatasetMRI(folder_testing,classes,'Testing',transform=transform)
-train_loader = data.DataLoader(train_dataset,batch_size=batch_size_test,shuffle=True)
+batch_size_test = 128
+test_dataset = DatasetMRI(folder_testing,classes,'Testing',transform=transform)
+test_loader = data.DataLoader(train_dataset,batch_size=batch_size_test,shuffle=True)
 
+# initiate test log
+testLog = ClassificationLog()
 
-#%%
+# initiate validation loss
+test_loss = 0
 
+# set the model to eval mode
+model.eval()
+
+with torch.no_grad():
+    for bacth in test_loader:        
+        # get batch images and labels
+        inputs = batch['image'].to(device)
+        labels = batch['label'].to(device)
+        
+        # forward pass
+        linear_output,output = model(inputs)
+        
+        # validation batch loss
+        loss = criterion(output, torch.max(labels, 1)[1])
+
+        # accumulate the valid_loss
+        test_loss += loss.item()
+        
+        # update log
+        testLog.BatchUpdate(0,output,linear_output,labels)
+    
+    test_loss /= len(test_loader)
+    testLog.EpochUpdate(0,test_loss)
+    print('Test Loss: %.3f.' % test_loss)
+        
+testLog.PlotConfusionMatrix(classes)
+    
+        
+    

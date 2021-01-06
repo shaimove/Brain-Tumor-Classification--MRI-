@@ -73,7 +73,10 @@ def CreateValidationSet(training_folder,validation_folder):
     return print('Done!')
     
 
-
+#%% 
+def count_parameters(model):
+    num_parmas = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return num_parmas
 
 
             

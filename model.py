@@ -1,34 +1,66 @@
 # model.py
-
 import torch
 from torch import nn as nn
 
+#%% ResNet50
+
 class MRIModel(nn.Module):
-    def __init__(self, in_channels=1, conv_channels=4):
+    def __init__(self, in_channels=1, first_conv_size=32,f=3,s=2):
         super().__init__()
         
-        # from (N*1*256*256) to (N*4*128*128)
-        self.block1 = ConvBlock(in_channels, conv_channels)
+        # Stage 1:
+        # from (N*1*256*256) to (N*32*128*128)
+        self.conv1 = nn.Conv2d(in_channels,first_conv_size,kernel_size=7,padding=3)
+        self.bn1 = nn.BatchNorm2d(first_conv_size)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(2,2)
         
-        # from (N*4*128*128) to (N*8*64*64)
-        self.block2 = ConvBlock(conv_channels, conv_channels * 2)
+        # Stage 2:
+        # from (N*32*128*128) to (N*64*64*64)
+        self.ConvBlock2 = ConvBlock(first_conv_size,[16,16,64],f,s)
+        self.Identity_2_1 = IdentityBlock([16,16,64],f)
+        self.Identity_2_2 = IdentityBlock([16,16,64],f)
         
-        # from (N*8*64*64) to (N*16*32*32)
-        self.block3 = ConvBlock(conv_channels * 2, conv_channels * 4)
+        # Stage 3:
+        # from (N*64*64*64) to (N*128*32*32)    
+        self.ConvBlock3 = ConvBlock(2*first_conv_size,[32,32,128],f,s)
+        self.Identity_3_1 = IdentityBlock([32,32,128],f)
+        self.Identity_3_2 = IdentityBlock([32,32,128],f)
+        self.Identity_3_3 = IdentityBlock([32,32,128],f)
+            
+        # Stage 4:
+        # from (N*128*32*32) to (N*256*16*16) 
+        self.ConvBlock4 = ConvBlock(4*first_conv_size,[64,64,256],f,s)
+        self.Identity_4_1 = IdentityBlock([64,64,256],f)
+        self.Identity_4_2 = IdentityBlock([64,64,256],f)
+        self.Identity_4_3 = IdentityBlock([64,64,256],f)
+        self.Identity_4_4 = IdentityBlock([64,64,256],f)
+        self.Identity_4_5 = IdentityBlock([64,64,256],f)
         
-        # from (N*16*32*32) to (N*32*16*16)
-        self.block4 = ConvBlock(conv_channels * 4, conv_channels * 8)
+        # Stage 5:
+        # from (N*256*16*16) to (N*512*8*8)
+        self.ConvBlock5 = ConvBlock(8*first_conv_size,[128,128,512],f,s)
+        self.Identity_5_1 = IdentityBlock([128,128,512],f)
+        self.Identity_5_2 = IdentityBlock([128,128,512],f)
+        self.Identity_5_3 = IdentityBlock([128,128,512],f)
         
-        # from (N*32*16*16) to (N*64*8*8)
-        self.block5 = ConvBlock(conv_channels * 8, conv_channels * 16)
+        # Stage 6:
+        # from (N*512*8*8) to (N*1024*4*4)
+        self.ConvBlock6 = ConvBlock(16*first_conv_size,[256,256,1024],f,s)
+        self.Identity_6_1 = IdentityBlock([256,256,1024],f)
+        self.Identity_6_2 = IdentityBlock([256,256,1024],f)
         
-        # Linear to 64-output
-        self.linear1 = nn.Linear(64*8*8, 64)
+        # Stage 7: Linear stage
+        # from (N*1024*4*4) to (N*1024*2*2)
+        self.avrg_pool = nn.AvgPool2d(2,2)
+        
+        # from (N*4096) to (N*64)
+        self.linear1 = nn.Linear(4096, 64)
         
         # TanH layer after first linear
         self.tanh = nn.Tanh()
         
-        # Linear to 4-output
+        # from (N*64) to (N*4)
         self.linear2 = nn.Linear(64, 4)
         
         # softmax layer
@@ -48,48 +80,173 @@ class MRIModel(nn.Module):
                     m.bias.data.fill_(0.01)  
     
     
-    def forward(self, input_batch):
+    def forward(self, X):
         
-        # run throw all blocks
-        block_out = self.block1(input_batch)
-        block_out = self.block2(block_out)
-        block_out = self.block3(block_out)
-        block_out = self.block4(block_out)
-        block_out = self.block5(block_out)
+        # Stage 1:
+        X = self.conv1(X)
+        X = self.bn1(X)
+        X = self.relu(X)
+        X = self.maxpool(X)
         
-        # flatten to 1D vector
-        conv_flat = block_out.view(block_out.size(0),-1,)
-            
-        # linear and softmax
-        linear_output = self.linear1(conv_flat)
-        linear_output = self.tanh(linear_output)
-        linear_output = self.linear2(linear_output)
-        output = self.softmax(linear_output)
+        # Stage 2:
+        X = self.ConvBlock2(X)
+        X = self.Identity_2_1(X)
+        X = self.Identity_2_2(X)
         
-        return linear_output,output
+        # Stage 3:
+        X = self.ConvBlock3(X)  
+        X = self.Identity_3_1(X)
+        X = self.Identity_3_2(X)
+        X = self.Identity_3_3(X)
         
+        # Stage 4: 
+        X = self.ConvBlock4(X)   
+        X = self.Identity_4_1(X)
+        X = self.Identity_4_2(X)
+        X = self.Identity_4_3(X)
+        X = self.Identity_4_4(X)
+        X = self.Identity_4_5(X)
+        
+        # Stage 5:
+        X = self.ConvBlock5(X)     
+        X = self.Identity_5_1(X)
+        X = self.Identity_5_2(X)
+        X = self.Identity_5_3(X)
+        
+        # Stage 6:
+        X = self.ConvBlock6(X)     
+        X = self.Identity_6_1(X)
+        X = self.Identity_6_2(X)
+        
+        # Stage 7:
+        X = self.avrg_pool(X) # average pooling
+        X = X.view(X.size(0),-1,) # flatten to 1D vector
+        X = self.linear1(X)
+        X = self.tanh(X)
+        linear = self.linear2(X)
+        output = self.softmax(X)
+        
+        return linear,output
         
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, conv_channels):
+
+#%% Identity Block
+
+class IdentityBlock(nn.Module):
+    # from (N*F3*H*W) to (N*F3,H,W)
+    def __init__(self,filters,f):
         super().__init__()
         
-        # two blocks of Cond2D->ReLU->BatchNorm2D ans than MaxPool2D
-        self.conv1 = nn.Conv2d(in_channels, conv_channels, kernel_size=5, padding=2)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.bn1 = nn.BatchNorm2d(conv_channels)
-        self.conv2 = nn.Conv2d(conv_channels, conv_channels, kernel_size=5, padding=2)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.bn2 = nn.BatchNorm2d(conv_channels)
+        # Retrieve Filters
+        F1, F2, F3 = filters
         
-        self.maxpool = nn.MaxPool2d(2, 2)
+        # Define First Main Path
+        self.conv1 = nn.Conv2d(F3,F1,kernel_size=1)
+        self.bn1 = nn.BatchNorm2d(F1)
+        self.relu1 = nn.ReLU(inplace=True)
+        
+        # Define second Main Path
+        self.conv2 = nn.Conv2d(F1,F2,kernel_size=f,padding=f//2)
+        self.bn2 = nn.BatchNorm2d(F2)
+        self.relu2 = nn.ReLU(inplace=True)
+        
+        # Define Third Main Path
+        self.conv3 = nn.Conv2d(F2,F3,kernel_size=1)
+        self.bn3 = nn.BatchNorm2d(F3)
+        self.relu3 = nn.ReLU(inplace=True)
+        
+    def forward(self,X):
+        # define shortcut for future
+        X_shortcut = X
+        
+        # First Main Path
+        X = self.conv1(X)
+        X = self.bn1(X)
+        X = self.relu1(X)
+        
+        # Second Main Path
+        X = self.conv2(X)
+        X = self.bn2(X)
+        X = self.relu2(X)
+        
+        # Third Main Path
+        X = self.conv3(X)
+        X = self.bn3(X)
+        
+        # Add and Activation
+        X = torch.add(X, X_shortcut)
+        X = self.relu3(X)
+        
+        return X
 
-    def forward(self, input_batch):
-        block_out = self.conv1(input_batch)
-        block_out = self.relu1(block_out)
-        block_out = self.bn1(block_out)
-        block_out = self.conv2(block_out)
-        block_out = self.relu2(block_out)
-        block_out = self.bn2(block_out)
+#%% Convolutional  Block
 
-        return self.maxpool(block_out)
+
+class ConvBlock(nn.Module):
+    # from (N*input_size*H*W) to (N*F3,H/2,W/2)
+    def __init__(self,input_size,filters,f,s):
+        super().__init__()
+        
+        # Retrieve Filters
+        F1, F2, F3 = filters
+        
+        # Define First Main Path
+        self.conv1 = nn.Conv2d(input_size,F1,kernel_size=1)
+        self.bn1 = nn.BatchNorm2d(F1)
+        self.relu1 = nn.ReLU(inplace=True)
+        
+        # Define second Main Path
+        self.conv2 = nn.Conv2d(F1,F2,kernel_size=f,padding=f//2,stride=s)
+        self.bn2 = nn.BatchNorm2d(F2)
+        self.relu2 = nn.ReLU(inplace=True)
+        
+        # Define Third Main Path
+        self.conv3 = nn.Conv2d(F2,F3,kernel_size=1)
+        self.bn3 = nn.BatchNorm2d(F3)
+        self.relu3 = nn.ReLU(inplace=True)
+        
+        # Define Parrallel Path
+        self.conv4 = nn.Conv2d(input_size,F3,kernel_size=1,stride=s)
+        self.bn4 = nn.BatchNorm2d(F3)
+    
+    
+    def forward(self,X):
+        # define shortcut for future
+        X_shortcut = X
+        
+        # First Main Path
+        X = self.conv1(X)
+        X = self.bn1(X)
+        X = self.relu1(X)
+        
+        # Second Main Path
+        X = self.conv2(X)
+        X = self.bn2(X)
+        X = self.relu2(X)
+        
+        # Third Main Path
+        X = self.conv3(X)
+        X = self.bn3(X)
+        
+        # Parrallel Path
+        X_shortcut = self.conv4(X_shortcut)
+        X_shortcut = self.bn4(X_shortcut)
+        
+        # Add and Activation
+        X = torch.add(X, X_shortcut)
+        X = self.relu3(X)
+        
+        return X
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
